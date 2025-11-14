@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "odoo-receipt-ocr",
+  "private_key_id": "a09403766895c7a3c9bf153b108f77400d89e4ea",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCnzWjXsrRHa4YG\nvZA45WeaYTZiZGdctq9KR0myAAVg96j6StylyjXsfgwTQ/qshgMm96yJ9L70ncir\ntdQXTeIGXAYnL9tRN8IW1987JjMURPDsAbIQxMgUxn0T7tFPia5DIgujbcp/bCL/\nGRfowqhrH0hPI1LxKVEyPId/O9X5r22uYNjRyKy5XRomj3484eIwnMtwDt8H6+cX\nOPNxZzThgHIZlUFSgV4qS1Hi2reNxVAsu+qtTUqWqM7ZVYeJY1t2g/aWLOn+V+Jc\n5QBMEIsl5ICRSdO2TE3Qnro2WkyCmDU7zzSsYBqg4KiveXqSpNinM4m4LrfAy4T/\nTQl80QDbAgMBAAECggEAMgY0/rS6NN5zprfFcojFQYtAjMWU4NlfWXv2FtgVwmoi\nmHdP3ybwu296RxYJeXw8HVZRvBDYCpGtPK9oqoff3Xh6px0Hu2ctd+TkGjyRlrXU\nwu7geEpJwZPIvvP/tz/60O2p3Y9CAomoxzbiX1QEpGa/hkQoGlfwalMMK9yZNiVf\ncvrQDC59/IfNzTUwYSF14jcy2m69BtWxONYvsiBa0N9OK5VSzhLDZcg7JTV+8J9m\n/bzDtTCUzuAgcd3CAifEm1RZlTCbcAFBXogt78HL9Zog0N9h2HZSfE9eNAEyLOMC\nTeeXKFyz23chBA0Eq7lzSypYGFf6uaG8XBbK95XYOQKBgQDnMf/1jL2QGXFvzMBv\nxAU5kVLtlXpu0RQpNJl1ni6mvGoSK7JKtHbPJfzaLM6L4k/0RTT8EJlwUadkv3Se\nBCU7eHYbuzZ4yJIndSFSAG2fI5ah5AQwBMNhLn1o+KyrUwtQBhT8tDwU9TwxqYrd\noPkS08b2fEJrKl+x7wBIxyVT6QKBgQC5zkMkwjPrPubv/JFkg++jYPMtHLj9XYvQ\nzI8KTgw/iXYeKq2VSiDyDiiFswneenfmRTQkNefaF93UPEwpdS5q5qjF3SD0CRoJ\nV7xI2/7oouS7fRv9GOwEOugVTzfKu/q8QEHOx2tEUf+XDRX8FO+nFAHNRya+hfiL\nWL6NORVIIwKBgCi5TfTazalMUgb3cg494Q2643imE+LhQUPg2Ac3zc/g8G4y9Dzk\nfOkQL/HeYqORQbQtXJ/p7J00ROAiOVB8OnK3TValK3srGVOJ9kyTdrvJcQcjOvma\nXTAJGF4dL40eG6gE6j15IfwvFmNJEgToDfebBjj0ul5WIHUfPFWVfqXBAoGBAKer\nXiPZrAhpZvTBsmJGPQXuAwN+m+DnfbgaICpoa90aKqDmWmYR0tEbva2I9yrw0SnW\n4Uqb6nGAgAl5sDDpMc39/+ctuQL/A6PSrHIDNHCyLj6Sk6M9zh2zGqPALNSh9Y3T\nXo8+nam1ZTPl9yTXr7vR7h5USr47HyKAHtRJ4s6JAoGBAIgfUN/MRNyufm1IOzU6\nCcA0Kym2r1z/k8bYrt3edncW8UC+pn7QQ6pzjrhPCqcTyzDPsoeqEssSLF/1CQZQ\nv/0q8oMEw2hREu2weVLSgK9QhAgLR6z3GAnCQTqm9CFnthY5kmZAyB4HMF3gE6kt\nUrXgGLcG9T6d9qPQwc/Hte19\n-----END PRIVATE KEY-----\n",
+  "client_email": "vision-access-318@odoo-receipt-ocr.iam.gserviceaccount.com",
+  "client_id": "107532534644574323393",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/vision-access-318%40odoo-receipt-ocr.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
