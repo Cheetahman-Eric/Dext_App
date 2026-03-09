@@ -29,5 +29,15 @@
     "name": "Shopify",
     "account_id": 1022,
     "product_id": 6054
+  },
+  "Google": {
+    "name": "Shopify",
+    "account_id": 1022,
+    "product_id": 6054
+  },
+  "U-Haul": {
+    "name": "U-Haul",
+    "account_id": 1012,
+    "product_id": 6064
   }
 }

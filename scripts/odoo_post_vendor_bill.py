@@ -5,9 +5,9 @@ from datetime import datetime, date
 import base64
 
 # Odoo connection setup
-ODOO_URL="https://cheetahman-eric-kandies-world-canada.odoo.com"
-ODOO_DB="cheetahman-eric-kandies-world-canada-main-17627416"
-ODOO_USERNAME="eric@kandiesworld.com"
+ODOO_URL = "https://cheetahman-eric-kandies-world-canada.odoo.com"
+ODOO_DB = "cheetahman-eric-kandies-world-canada-main-17627416"
+ODOO_USERNAME = "eric@kandiesworld.com"
 ODOO_PASSWORD = "20a792fc10db3831805e2d7f38d6f6617beb6908"
 
 INPUT_DIR = Path(__file__).resolve().parent.parent / 'output'
@@ -20,6 +20,8 @@ print(f"🔐 Authenticated as {ODOO_USERNAME} (uid={uid})")
 
 import re
 import os
+
+
 def parse_date_safe(date_str):
     if not date_str:
         return date.today().isoformat()
@@ -35,6 +37,7 @@ def parse_date_safe(date_str):
             continue
     print(f"⚠️ Could not parse date '{date_str}', using today.")
     return date.today().isoformat()
+
 
 # Load all parsed JSONs
 for parsed_file in INPUT_DIR.glob("*.ocr.parsed.json"):
@@ -56,7 +59,7 @@ for parsed_file in INPUT_DIR.glob("*.ocr.parsed.json"):
                     card_suffix = line.strip()
                     break
                 elif re.search(r"\*{2,4}\s*\d{4}", line):
-                    next_lines = lines[i+1:i+3]
+                    next_lines = lines[i + 1:i + 3]
                     for next_line in next_lines:
                         if re.search(r"(visa|mastercard|amex|discover)", next_line, re.IGNORECASE):
                             card_suffix = f"{next_line.strip()} {line.strip()}"
@@ -64,7 +67,7 @@ for parsed_file in INPUT_DIR.glob("*.ocr.parsed.json"):
                     if card_suffix:
                         break
                 elif re.search(r"(visa|mastercard|amex|discover)", line, re.IGNORECASE):
-                    for j in range(i+1, min(i+3, len(lines))):
+                    for j in range(i + 1, min(i + 3, len(lines))):
                         if re.search(r"\*{2,4}\s*\d{4}", lines[j]):
                             card_suffix = f"{line.strip()} {lines[j].strip()}"
                             break
@@ -120,44 +123,103 @@ for parsed_file in INPUT_DIR.glob("*.ocr.parsed.json"):
     fallback_account_id = 1022  # New fallback account
     account_id = data["account_id"] if "account_id" in data and data["account_id"] else fallback_account_id
 
+    # Calculate price_unit - handle None values
+    subtotal = data.get("subtotal")
+    total = data.get("total")
+
+    # Use subtotal if available, otherwise use total
+    price_unit_str = subtotal if subtotal else total
+
+    # Safety check
+    if not price_unit_str:
+        print(f"⚠️ Skipping {parsed_file.name}: missing both subtotal and total.")
+        continue
+
+    # Remove commas and convert to float
+    try:
+        price_unit = float(price_unit_str.replace(",", "") if isinstance(price_unit_str, str) else price_unit_str)
+    except (ValueError, AttributeError) as e:
+        print(f"⚠️ Skipping {parsed_file.name}: invalid price value '{price_unit_str}': {e}")
+        continue
+
     invoice_line = {
         'product_id': data['product_id'] if 'product_id' in data else 6053,
         'name': data['product'] if 'product' in data else "Web expense product",
         'quantity': 1,
-        'price_unit': float(data.get("subtotal", data["total"]).replace(",", "")),
+        'price_unit': price_unit,
         'account_id': account_id,
     }
 
-    tax_data = data.get("tax")
-    tax_rate = None
-    tax_amount = None
+    # ========== FIXED TAX HANDLING ==========
+    # Handle both single tax (old format) and multiple taxes (new Shopify format)
+    matched_tax_ids = []
 
-    if isinstance(tax_data, dict):
-        tax_rate = tax_data.get("rate")
-        tax_amount = tax_data.get("amount")
-    elif isinstance(tax_data, str) or isinstance(tax_data, float) or isinstance(tax_data, int):
-        tax_rate = tax_data
+    # Check for multiple taxes (Shopify format)
+    if "taxes" in data and isinstance(data["taxes"], list):
+        print(f"🔍 Processing {len(data['taxes'])} taxes from invoice...")
+        for tax_item in data["taxes"]:
+            tax_rate = tax_item.get("rate")
+            tax_name = tax_item.get("name", "")
 
-    if tax_rate:
-        try:
-            tax_rate_f = float(tax_rate)
-            all_taxes = models.execute_kw(
-                ODOO_DB, uid, ODOO_PASSWORD, 'account.tax', 'search_read',
-                [[['company_id', '=', 6], ['type_tax_use', '=', 'purchase']]],
-                {'fields': ['id', 'amount', 'name']}
-            )
-            tax_id = None
-            for tax in all_taxes:
-                if abs(tax['amount'] - tax_rate_f) < 0.1:
-                    tax_id = tax['id']
-                    print(f"🔍 Matched tax: {tax['name']} (ID={tax_id}, Rate={tax['amount']}%)")
-                    break
-            if tax_id:
-                invoice_line["tax_ids"] = [(6, 0, [tax_id])]
-            else:
-                print(f"❌ No matching tax found for {tax_rate_f}%.")
-        except Exception as e:
-            print(f"⚠️ Failed to match tax from value '{tax_rate}': {e}")
+            if tax_rate:
+                try:
+                    tax_rate_f = float(tax_rate)
+                    # Search for matching tax in Odoo
+                    all_taxes = models.execute_kw(
+                        ODOO_DB, uid, ODOO_PASSWORD, 'account.tax', 'search_read',
+                        [[['company_id', '=', 6], ['type_tax_use', '=', 'purchase']]],
+                        {'fields': ['id', 'amount', 'name']}
+                    )
+
+                    tax_id = None
+                    for tax in all_taxes:
+                        if abs(tax['amount'] - tax_rate_f) < 0.1:
+                            tax_id = tax['id']
+                            print(f"  ✓ Matched {tax_name}: {tax['name']} (ID={tax_id}, Rate={tax['amount']}%)")
+                            matched_tax_ids.append(tax_id)
+                            break
+
+                    if not tax_id:
+                        print(f"  ❌ No matching tax found for {tax_name} ({tax_rate_f}%)")
+                except Exception as e:
+                    print(f"  ⚠️ Failed to match tax '{tax_name}': {e}")
+
+    # Fallback: Check for single tax (old format for other vendors)
+    elif "tax" in data:
+        tax_data = data.get("tax")
+        tax_rate = None
+
+        if isinstance(tax_data, dict):
+            tax_rate = tax_data.get("rate")
+        elif isinstance(tax_data, (str, float, int)):
+            tax_rate = tax_data
+
+        if tax_rate:
+            try:
+                tax_rate_f = float(tax_rate)
+                all_taxes = models.execute_kw(
+                    ODOO_DB, uid, ODOO_PASSWORD, 'account.tax', 'search_read',
+                    [[['company_id', '=', 6], ['type_tax_use', '=', 'purchase']]],
+                    {'fields': ['id', 'amount', 'name']}
+                )
+
+                for tax in all_taxes:
+                    if abs(tax['amount'] - tax_rate_f) < 0.1:
+                        tax_id = tax['id']
+                        print(f"🔍 Matched tax: {tax['name']} (ID={tax_id}, Rate={tax['amount']}%)")
+                        matched_tax_ids.append(tax_id)
+                        break
+
+                if not matched_tax_ids:
+                    print(f"❌ No matching tax found for {tax_rate_f}%.")
+            except Exception as e:
+                print(f"⚠️ Failed to match tax from value '{tax_rate}': {e}")
+
+    # Apply matched taxes to invoice line
+    if matched_tax_ids:
+        invoice_line["tax_ids"] = [(6, 0, matched_tax_ids)]
+        print(f"💰 Applied {len(matched_tax_ids)} tax(es) to invoice line")
+    # ========== END TAX HANDLING ==========
 
     invoice_ref = data.get("invoice_number")
     if not invoice_ref:
@@ -307,6 +369,7 @@ for parsed_file in INPUT_DIR.glob("*.ocr.parsed.json"):
                     import unicodedata
                     import re
                     return re.sub(r'[\W_]+', '', unicodedata.normalize('NFKD', name).lower())
+
 
                 file_stem_normalized = normalize_name(f_path.stem)
                 parsed_normalized = normalize_name(parsed_stem)
