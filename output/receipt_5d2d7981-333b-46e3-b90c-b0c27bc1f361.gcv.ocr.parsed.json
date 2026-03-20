@@ -1,0 +1,18 @@
+{
+  "vendor": "CS: 3",
+  "invoice_number": "40305",
+  "date": "2025-07-28",
+  "subtotal": "1.79",
+  "total": "2.06",
+  "taxes": [
+    {
+      "amount": 0.09,
+      "rate": 5.0
+    },
+    {
+      "amount": 0.18,
+      "rate": 9.975
+    }
+  ],
+  "card_info": "Mobile Upload"
+}

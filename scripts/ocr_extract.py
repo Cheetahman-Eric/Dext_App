@@ -5,7 +5,7 @@ import json
 from PIL import Image
 from pathlib import Path
 
-INPUT_DIR = Path(__file__).resolve().parent.parent / 'input' / 'inbox'
+INPUT_DIR = Path(__file__).resolve().parent.parent / 'input'
 OUTPUT_DIR = Path(__file__).resolve().parent.parent / 'output'
 
 
