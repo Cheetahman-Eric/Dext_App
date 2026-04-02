@@ -1,186 +1,107 @@
 import json
 import xmlrpc.client
-from pathlib import Path
-from datetime import datetime, date
-import base64
 import sys
-import re
-import os
+import base64
+from pathlib import Path
+from datetime import date
 
-# Odoo connection setup
-ODOO_URL = "https://cheetahman-eric-kandies-world-canada.odoo.com"
-ODOO_DB = "cheetahman-eric-kandies-world-canada-main-17627416"
-ODOO_USERNAME = "eric@kandiesworld.com"
-ODOO_PASSWORD = "20a792fc10db3831805e2d7f38d6f6617beb6908"
+# --- CONFIG ODOO ---
+URL = "https://cheetahman-eric-kandies-world-canada.odoo.com"
+DB = "cheetahman-eric-kandies-world-canada-main-17627416"
+USER = "eric@kandiesworld.com"
+PASS = "20a792fc10db3831805e2d7f38d6f6617beb6908"
 
-# Catch the Category ID and Card Name from the command line
-passed_category_id = sys.argv[1] if len(sys.argv) > 1 else None
-passed_card_name = sys.argv[2] if len(sys.argv) > 2 else "Not Specified"
+# --- ARGUMENTS ---
+PASSED_PRODUCT_ID = sys.argv[1] if len(sys.argv) > 1 else "8101"
+PASSED_CARD = sys.argv[2] if len(sys.argv) > 2 else "Not Specified"
+REGION = sys.argv[3] if len(sys.argv) > 3 else "CAN"
 
-# --- PRODUCT MAPPING DICTIONARY ---
-# Maps your UI Category IDs to specific Odoo Product IDs
-CATEGORY_TO_PRODUCT = {
-    "14959": 8101,  # Festival Meal + Misc Cost (SKU: ACCOUNT-801200)
-    "14960": 8102,  # Festival Transport (SKU: ACCOUNT-801300)
-    "14961": 8103,  # Festival Hotels (SKU: ACCOUNT-801400)
-    "14962": 8104,  # Festival Equipement Transportation (SKU: ACCOUNT-801500)
-    "14963": 8105,  # Festival Flight Cost (SKU: ACCOUNT-801600)
-    "14964": 8106,  # Festival Contact Labor Cost (SKU: ACCOUNT-801700)
-    "14965": 8107   # Festival Misc Cost (SKU: ACCOUNT-801800)
+BASE_DIR = Path(__file__).resolve().parent.parent
+INPUT_DIR = BASE_DIR / "input"
+OUTPUT_DIR = BASE_DIR / "output"
+
+# --- MAPPING PRODUIT -> VENDEUR ---
+# On fait le lien entre l'ID du produit (81xx) et l'ID du Vendor (149xx)
+MAPPING = {
+    "8101": 14959,  # Meal -> Festival Meal + Misc Cost
+    "8102": 14960,  # Transport -> Festival Transport
+    "8103": 14961,  # Hotels -> Festival Hotels
+    "8104": 14962,  # Equipement -> Festival Equipement Transportation
+    "8105": 14963,  # Flight -> Festival Flight Cost
+    "8106": 14964,  # Labor -> Festival Contact Labor Cost
+    "8107": 14965  # Misc -> Festival Misc Cost
 }
 
-INPUT_DIR = Path(__file__).resolve().parent.parent / 'output'
 
-common = xmlrpc.client.ServerProxy(f"{ODOO_URL}/xmlrpc/2/common", allow_none=True)
-uid = common.authenticate(ODOO_DB, ODOO_USERNAME, ODOO_PASSWORD, {})
-models = xmlrpc.client.ServerProxy(f"{ODOO_URL}/xmlrpc/2/object", allow_none=True)
+def post_to_odoo():
+    common = xmlrpc.client.ServerProxy(f"{URL}/xmlrpc/2/common")
+    uid = common.authenticate(DB, USER, PASS, {})
+    models = xmlrpc.client.ServerProxy(f"{URL}/xmlrpc/2/object")
 
-print(f"🔐 Authenticated as {ODOO_USERNAME} (uid={uid})")
+    # On récupère le Vendor ID associé au produit choisi, sinon 14959 par défaut
+    final_vendor_id = MAPPING.get(PASSED_PRODUCT_ID, 14959)
 
-def parse_date_safe(date_str):
-    if not date_str:
-        return date.today().isoformat()
-    try:
-        return date.fromisoformat(date_str).isoformat()
-    except ValueError:
-        pass
-    for fmt in ("%d/%m/%Y", "%m/%d/%Y", "%Y/%m/%d", "%d-%m-%Y", "%m-%d-%Y"):
+    parsed_files = list(OUTPUT_DIR.glob("*.parsed.json"))
+
+    for p_file in parsed_files:
+        with open(p_file, "r") as f:
+            data = json.load(f)
+
+        total_extracted = float(data.get("total", 0))
+
+        # 1. TAXES
+        tax_ids = []
+        if REGION == "CAN":
+            search_taxes = models.execute_kw(DB, uid, PASS, 'account.tax', 'search_read',
+                                             [[['type_tax_use', '=', 'purchase'], ['company_id', '=', 6]]],
+                                             {'fields': ['id', 'amount']})
+            for t in search_taxes:
+                if abs(t['amount'] - 5.0) < 0.1 or abs(t['amount'] - 9.975) < 0.1:
+                    tax_ids.append(t['id'])
+
+        # 2. CALCUL SOUS-TOTAL
+        subtotal_clean = total_extracted / 1.14975 if (REGION == "CAN" and tax_ids) else total_extracted
+
+        bill_vals = {
+            'move_type': 'in_invoice',
+            'partner_id': final_vendor_id,  # ICI : On utilise le bon vendeur !
+            'payment_reference': PASSED_CARD,
+            'invoice_date': date.today().isoformat(),
+            'company_id': 6,
+            'invoice_line_ids': [[0, 0, {
+                'product_id': int(PASSED_PRODUCT_ID),
+                'name': f"Reçu - {PASSED_CARD}",
+                'quantity': 1,
+                'price_unit': subtotal_clean,
+                'tax_ids': [[6, 0, tax_ids]] if tax_ids else []
+            }]]
+        }
+
         try:
-            return datetime.strptime(date_str, fmt).date().isoformat()
-        except ValueError:
-            continue
-    print(f"⚠️ Could not parse date '{date_str}', using today.")
-    return date.today().isoformat()
+            bill_id = models.execute_kw(DB, uid, PASS, 'account.move', 'create', [bill_vals])
+            print(f"✅ Facture créée ! ID: {bill_id} | Vendor ID: {final_vendor_id}")
 
-# Load all parsed JSONs
-for parsed_file in INPUT_DIR.glob("*.ocr.parsed.json"):
-    with open(parsed_file, "r") as f:
-        data = json.load(f)
+            # 3. PHOTO
+            stem = p_file.name.replace(".parsed.json", "")
+            image_path = None
+            for ext in ['.JPG', '.jpg', '.jpeg', '.png']:
+                img_test = INPUT_DIR / (stem + ext)
+                if img_test.exists(): image_path = img_test; break
 
-    # Load associated OCR text to check for card info if not sent by phone
-    ocr_file = parsed_file.with_name(parsed_file.name.replace(".parsed.json", ".json"))
-    card_from_ocr = ""
-    if ocr_file.exists():
-        with open(ocr_file, "r") as f_ocr:
-            ocr_data = json.load(f_ocr)
-            text = ocr_data.get("text", "")
-            match = re.search(r"(\*{2,4}\s*\d{4})", text)
-            if match:
-                card_from_ocr = match.group(1).replace(' ', '')
-
-    if not data.get("invoice_number") or not data.get("total"):
-        print(f"⚠️ Skipping {parsed_file.name}: missing key fields")
-        continue
-
-    # Vendor Logic
-    vendor_id = None
-    vendor_name = ""
-    if passed_category_id and passed_category_id.isdigit():
-        vendor_id = int(passed_category_id)
-        vendor_data = models.execute_kw(ODOO_DB, uid, ODOO_PASSWORD, 'res.partner', 'read', [[vendor_id], ['name']])
-        if vendor_data:
-            vendor_name = vendor_data[0]['name']
-            print(f"🎯 Category Mode: Using Fixed Odoo Contact '{vendor_name}' (ID {vendor_id})")
-    else:
-        vendor_info = data.get("vendor")
-        vendor_name = vendor_info[0].strip() if isinstance(vendor_info, list) and vendor_info else str(vendor_info).strip()
-        vendor_ids = models.execute_kw(ODOO_DB, uid, ODOO_PASSWORD, 'res.partner', 'search', [[['name', '=', vendor_name]]])
-        if vendor_ids: vendor_id = vendor_ids[0]
-        else:
-            vendor_id = models.execute_kw(ODOO_DB, uid, ODOO_PASSWORD, 'res.partner', 'create', [{'name': vendor_name, 'supplier_rank': 1}])
-
-    # Prioritize Manual Card Selection from Phone
-    final_card_info = passed_card_name if (passed_card_name and passed_card_name != "Not Specified") else card_from_ocr
-
-    subtotal = data.get("subtotal")
-    total = data.get("total")
-    price_unit_str = subtotal if subtotal else total
-
-    try:
-        price_unit = float(str(price_unit_str).replace(",", ""))
-    except:
-        continue
-
-    # === SELECT PRODUCT BASED ON MAPPING ===
-    mapped_product_id = CATEGORY_TO_PRODUCT.get(str(passed_category_id), 6053)
-
-    # Note: We do NOT send account_id here so Odoo uses the Product's default expense account
-    invoice_line = {
-        'product_id': mapped_product_id,
-        'name': f"[{vendor_name}] Expense - {data.get('date', 'No Date')}",
-        'quantity': 1,
-        'price_unit': price_unit,
-    }
-
-    # Tax Handling
-    matched_tax_ids = []
-    if "taxes" in data and isinstance(data["taxes"], list):
-        for tax_item in data["taxes"]:
-            tax_rate = tax_item.get("rate")
-            if tax_rate:
-                try:
-                    tax_rate_f = float(tax_rate)
-                    all_taxes = models.execute_kw(ODOO_DB, uid, ODOO_PASSWORD, 'account.tax', 'search_read',
-                                                  [[['company_id', '=', 6], ['type_tax_use', '=', 'purchase']]],
-                                                  {'fields': ['id', 'amount']})
-                    for tax in all_taxes:
-                        if abs(tax['amount'] - tax_rate_f) < 0.1:
-                            matched_tax_ids.append(tax['id'])
-                            break
-                except: pass
-
-    if matched_tax_ids:
-        invoice_line["tax_ids"] = [(6, 0, list(set(matched_tax_ids)))]
-
-    invoice_ref = data.get("invoice_number")
-    invoice_date = parse_date_safe(data.get("date"))
-
-    # Duplication check
-    try:
-        domain = [['move_type', '=', 'in_invoice'], ['partner_id', '=', vendor_id], ['ref', '=', invoice_ref]]
-        if models.execute_kw(ODOO_DB, uid, ODOO_PASSWORD, 'account.move', 'search', [domain]):
-            print(f"⏭️ Bill already exists for '{vendor_name}' ref '{invoice_ref}'. Skipping.")
-            continue
-    except: pass
-
-    # Currency logic
-    currency_name = "USD" if "pirate ship" in vendor_name.lower() else "CAD"
-    currency_ids = models.execute_kw(ODOO_DB, uid, ODOO_PASSWORD, 'res.currency', 'search', [[('name', '=', currency_name)]])
-    currency_id = currency_ids[0] if currency_ids else None
-
-    invoice_lines = [[0, 0, invoice_line]]
-    if final_card_info:
-        invoice_lines.append([0, 0, {'display_type': 'line_note', 'name': f"Paid with {final_card_info}"}])
-
-    move_vals = {
-        'company_id': 6,
-        'move_type': 'in_invoice',
-        'partner_id': vendor_id,
-        'invoice_date': invoice_date,
-        'ref': invoice_ref,
-        'payment_reference': final_card_info,
-        'invoice_line_ids': invoice_lines,
-        'currency_id': currency_id,
-    }
-
-    move_id = models.execute_kw(ODOO_DB, uid, ODOO_PASSWORD, 'account.move', 'create', [move_vals])
-    print(f"🧾 Created vendor bill ID {move_id} using Product ID {mapped_product_id} ({vendor_name})")
-
-    # Attachment Logic
-    original_stem = parsed_file.name.split('.')[0]
-    input_dir = Path(__file__).resolve().parent.parent / 'input'
-    for match in input_dir.glob(f"{original_stem}*"):
-        if match.suffix.lower() in [".pdf", ".jpg", ".jpeg", ".png"]:
-            try:
-                with open(match, "rb") as img_f:
-                    encoded_data = base64.b64encode(img_f.read()).decode('utf-8')
-                    ext = match.suffix.lower()
-                    mimetype = 'application/pdf' if ext == '.pdf' else f"image/{ext[1:]}"
-                    if mimetype == "image/jpg": mimetype = "image/jpeg"
-                    models.execute_kw(ODOO_DB, uid, ODOO_PASSWORD, 'ir.attachment', 'create', [{
-                        'name': match.name, 'res_model': 'account.move', 'res_id': move_id,
-                        'type': 'binary', 'datas': encoded_data, 'mimetype': mimetype, 'company_id': 6,
+            if image_path:
+                with open(image_path, "rb") as img_file:
+                    models.execute_kw(DB, uid, PASS, 'ir.attachment', 'create', [{
+                        'name': image_path.name,
+                        'res_model': 'account.move', 'res_id': bill_id,
+                        'type': 'binary', 'datas': base64.b64encode(img_file.read()).decode('utf-8'),
                     }])
-                print(f"📎 Attached original file: {match.name}")
-                break
-            except Exception as e: print(f"❌ Failed to attach file: {e}")
+
+            p_file.unlink()
+            if image_path: image_path.unlink()
+
+        except Exception as e:
+            print(f"❌ Erreur Odoo: {e}")
+
+
+if __name__ == "__main__":
+    post_to_odoo()

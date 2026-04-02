@@ -1,4 +1,6 @@
 .venv/
-.env
+Google Vision/*.json
+input/*
+output/*
 __pycache__/
-.idea/
+.DS_Store

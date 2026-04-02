@@ -11,7 +11,7 @@ load_dotenv()
 
 # --- GOOGLE AUTHENTICATION ---
 # Pointing to the specific folder 'google vision' where your JSON key lives
-KEY_FILE = Path(__file__).resolve().parent.parent / "google vision" / "odoo-receipt-ocr-484d2f7fa5c1.json"
+KEY_FILE = Path(__file__).resolve().parent.parent / "google vision" / "odoo-receipt-ocr-8bf284e40d30.json"
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(KEY_FILE)
 
 # --- FOLDERS ---

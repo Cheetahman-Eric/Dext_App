@@ -1,27 +1,39 @@
 #!/bin/bash
 
-# $1 is Category, $2 is Card
-CATEGORY_ID=$1
+# --- CONFIGURATION DES CHEMINS ---
+# On remonte d'un niveau depuis 'scripts' pour arriver à la racine 'DEXT'
+BASE_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." &> /dev/null && pwd )"
+
+CAT_ID=$1
 CARD_NAME=$2
+REGION=$3
 
-# Ensure we are in the scripts directory
-cd "$(dirname "$0")"
+# --- DÉTECTION DU PYTHON ACTIF ---
+# Au lieu de deviner le chemin du venv, on utilise le python actif du terminal
+PYTHON_BIN=$(which python3)
 
-echo "🚀 Starting DEXT OCR to Odoo pipeline"
-echo "📂 Category ID: $CATEGORY_ID"
-echo "💳 Payment Method: $CARD_NAME"
+echo "------------------------------------------"
+echo "🛠️  PIPELINE START"
+echo "📂 Base Dir: $BASE_DIR"
+echo "🐍 Python: $PYTHON_BIN"
+echo "------------------------------------------"
 
-echo "🧹 Cleaning up previous OCR output..."
-rm -f ../output/*.json
+# Étape 1: Extraction Google Vision
+echo "🔍 Step 1: Google Vision..."
+$PYTHON_BIN "$BASE_DIR/scripts/vision_ocr_extract.py"
 
-echo "📝 Step 1-3: OCR Extraction..."
-python ocr_extract.py
-python vision_ocr_extract.py
-python gcv_to_ocr.py
+# Étape 2: Simplification GCV -> OCR
+echo "🔄 Step 2: Formatting..."
+$PYTHON_BIN "$BASE_DIR/scripts/gcv_to_ocr.py"
 
-echo "📝 Step 4: Parse OCR text..."
-python parse_ocr_text_combined.py
+# Étape 3: Analyse (CAN vs US)
+echo "🧠 Step 3: Parsing..."
+$PYTHON_BIN "$BASE_DIR/scripts/parse_ocr_text_combined.py" "$REGION"
 
-echo "📝 Step 5: Upload to Odoo..."
-# PASS BOTH TO THE FINAL SCRIPT
-python odoo_post_vendor_bill.py "$CATEGORY_ID" "$CARD_NAME"
+# Étape 4: Envoi Odoo
+echo "🧾 Step 4: Odoo Posting..."
+$PYTHON_BIN "$BASE_DIR/scripts/odoo_post_vendor_bill.py" "$CAT_ID" "$CARD_NAME" "$REGION"
+
+echo "------------------------------------------"
+echo "✅ FINISHED"
+echo "------------------------------------------"

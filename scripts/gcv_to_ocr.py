@@ -1,41 +1,37 @@
-import os
 import json
 from pathlib import Path
 
-INPUT_DIR = Path(__file__).resolve().parent.parent / 'output'
+BASE_DIR = Path(__file__).resolve().parent.parent
+OUTPUT_DIR = BASE_DIR / "output"
 
-def convert_gcv_to_ocr(gcv_path):
-    with open(gcv_path, 'r') as f:
-        gcv_data = json.load(f)
 
-    # Detect new or old format
-    if "textAnnotations" in gcv_data:
-        # OLD format from Google Vision
-        text = gcv_data.get("textAnnotations", [{}])[0].get("description", "")
-    elif "text" in gcv_data:
-        # NEW format from vision_ocr_extract.py
-        text = gcv_data.get("text", "")
-    else:
-        print(f"⚠️ No recognizable text found in: {gcv_path.name}")
-        text = ""
+def simplify_gcv():
+    # Cherche les fichiers bruts de Google Vision
+    json_files = list(OUTPUT_DIR.glob("*.gcv.json"))
 
-    output_data = {"text": text}
+    if not json_files:
+        print("📭 Aucun fichier .gcv.json trouvé.")
+        return
 
-    # 🏷️ Preserve the card_used tag if available
-    if "card_used" in gcv_data:
-        output_data["card_used"] = gcv_data["card_used"]
-    else:
-        # Fallback: Try to infer from folder name
-        if "visa_" in str(gcv_path).lower():
-            folder_name = gcv_path.parent.name
-            if "visa_" in folder_name.lower():
-                output_data["card_used"] = folder_name.replace("_", " ").title()
+    for json_file in json_files:
+        print(f"🔄 Simplification de : {json_file.name}")
+        with open(json_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
 
-    output_path = gcv_path.with_name(gcv_path.stem + ".ocr.json")
-    with open(output_path, 'w') as f:
-        json.dump(output_data, f, indent=2)
+        # On nettoie le nom pour enlever le .gcv
+        clean_name = json_file.name.replace(".gcv.json", ".ocr.json")
 
-    print(f"✅ Saved OCR output to: {output_path.name}")
+        simple_data = {
+            "filename": json_file.name.replace(".gcv.json", ""),
+            "text": data.get("text", "")
+        }
 
-for gcv_file in INPUT_DIR.glob("*.gcv.json"):
-    convert_gcv_to_ocr(gcv_file)
+        with open(OUTPUT_DIR / clean_name, 'w', encoding='utf-8') as f:
+            json.dump(simple_data, f, indent=4)
+
+        json_file.unlink()  # Supprime le .gcv.json
+        print(f"✅ Créé : {clean_name}")
+
+
+if __name__ == "__main__":
+    simplify_gcv()
