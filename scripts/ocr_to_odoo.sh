@@ -1,38 +1,35 @@
 #!/bin/bash
 
-# --- CONFIGURATION DES CHEMINS ---
-# On remonte d'un niveau depuis 'scripts' pour arriver à la racine 'DEXT'
-BASE_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." &> /dev/null && pwd )"
-
+# Récupération des arguments envoyés par le Bridge
 CAT_ID=$1
 CARD_NAME=$2
 REGION=$3
 
-# --- DÉTECTION DU PYTHON ACTIF ---
-# Au lieu de deviner le chemin du venv, on utilise le python actif du terminal
-PYTHON_BIN=$(which python3)
-
 echo "------------------------------------------"
 echo "🛠️  PIPELINE START"
-echo "📂 Base Dir: $BASE_DIR"
-echo "🐍 Python: $PYTHON_BIN"
+echo "📂 Base Dir: $(pwd)"
+echo "🌍 Région reçue par le SH : $REGION"
 echo "------------------------------------------"
 
-# Étape 1: Extraction Google Vision
+# Step 1: Google Vision OCR
 echo "🔍 Step 1: Google Vision..."
-$PYTHON_BIN "$BASE_DIR/scripts/vision_ocr_extract.py"
+# CORRECTION : Nom exact selon ton screenshot
+python3 scripts/vision_ocr_extract.py
+echo "------------------------------------------"
 
-# Étape 2: Simplification GCV -> OCR
+# Step 2: Formatting
 echo "🔄 Step 2: Formatting..."
-$PYTHON_BIN "$BASE_DIR/scripts/gcv_to_ocr.py"
+python3 scripts/gcv_to_ocr.py
+echo "------------------------------------------"
 
-# Étape 3: Analyse (CAN vs US)
+# Step 3: Parsing
 echo "🧠 Step 3: Parsing..."
-$PYTHON_BIN "$BASE_DIR/scripts/parse_ocr_text_combined.py" "$REGION"
+python3 scripts/parse_ocr_text_combined.py "$REGION"
+echo "------------------------------------------"
 
-# Étape 4: Envoi Odoo
+# Step 4: Odoo Posting
 echo "🧾 Step 4: Odoo Posting..."
-$PYTHON_BIN "$BASE_DIR/scripts/odoo_post_vendor_bill.py" "$CAT_ID" "$CARD_NAME" "$REGION"
+python3 scripts/odoo_post_vendor_bill.py "$CAT_ID" "$CARD_NAME" "$REGION"
 
 echo "------------------------------------------"
 echo "✅ FINISHED"
