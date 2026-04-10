@@ -11,7 +11,7 @@ DB = "cheetahman-eric-kandies-world-canada-main-17627416"
 USER = "eric@kandiesworld.com"
 PASS = "20a792fc10db3831805e2d7f38d6f6617beb6908"
 
-# --- ARGUMENTS REÇUS DU BASH ---
+# --- ARGUMENTS ---
 PASSED_PRODUCT_ID = sys.argv[1] if len(sys.argv) > 1 else "8101"
 PASSED_CARD = sys.argv[2] if len(sys.argv) > 2 else "Not Specified"
 REGION = sys.argv[3] if len(sys.argv) > 3 else "CAN"
@@ -20,7 +20,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 INPUT_DIR = BASE_DIR / "input"
 OUTPUT_DIR = BASE_DIR / "output"
 
-# Mapping Produit (Rocket) -> Vendeur (Odoo)
 MAPPING = {
     "8101": 14959, "8102": 14960, "8103": 14961,
     "8104": 14962, "8105": 14963, "8106": 14964, "8107": 14965
@@ -32,17 +31,11 @@ def post_to_odoo():
     uid = common.authenticate(DB, USER, PASS, {})
     models = xmlrpc.client.ServerProxy(f"{URL}/xmlrpc/2/object")
 
-    # IDs confirmés : USD=1, CAD=3
     USD_ID = 1
     CAD_ID = 3
-
     final_vendor_id = MAPPING.get(PASSED_PRODUCT_ID, 14959)
 
     parsed_files = list(OUTPUT_DIR.glob("*.parsed.json"))
-
-    if not parsed_files:
-        print("📭 Aucun fichier .parsed.json à traiter.")
-        return
 
     for p_file in parsed_files:
         print(f"📦 Traitement de {p_file.name}...")
@@ -51,20 +44,23 @@ def post_to_odoo():
 
         total_extracted = float(data.get("total", 0))
 
-        # --- LOGIQUE RÉGIONALE ---
+        extracted_date = data.get("date")
+        if extracted_date:
+            bill_date = extracted_date
+        else:
+            bill_date = date.today().isoformat()
+            print(f"🕒 Date non trouvée, utilisation date d'aujourd'hui.")
+
         tax_ids = []
         price_to_send = total_extracted
-
-        # Détection de la région (USA ou CAN)
         current_region = str(REGION).upper()
 
         if "USA" in current_region or "US" in current_region:
             final_currency_id = USD_ID
-            price_to_send = total_extracted  # Pas de division de taxes pour US
-            print(f"🇺🇸 MODE USA DÉTECTÉ (Currency ID: {USD_ID})")
+            price_to_send = total_extracted
+            print(f"🇺🇸 MODE USA - Date Facture: {bill_date}")
         else:
             final_currency_id = CAD_ID
-            # Recherche des taxes Canada (TPS/TVQ)
             try:
                 search_taxes = models.execute_kw(DB, uid, PASS, 'account.tax', 'search_read',
                                                  [[['type_tax_use', '=', 'purchase'], ['company_id', '=', 6]]],
@@ -73,17 +69,15 @@ def post_to_odoo():
                     if abs(t['amount'] - 5.0) < 0.1 or abs(t['amount'] - 9.975) < 0.1:
                         tax_ids.append(t['id'])
             except:
-                print("⚠️ Impossible de lire les taxes.")
-
+                pass
             price_to_send = total_extracted / 1.14975
-            print(f"🇨🇦 MODE CANADA DÉTECTÉ (Currency ID: {CAD_ID})")
+            print(f"🇨🇦 MODE CANADA - Date Facture: {bill_date}")
 
-        # --- CONSTRUCTION DE LA FACTURE ---
         bill_vals = {
             'move_type': 'in_invoice',
             'partner_id': final_vendor_id,
             'payment_reference': PASSED_CARD,
-            'invoice_date': date.today().isoformat(),
+            'invoice_date': bill_date,
             'company_id': 6,
             'currency_id': final_currency_id,
             'invoice_line_ids': [[0, 0, {
@@ -97,9 +91,8 @@ def post_to_odoo():
 
         try:
             bill_id = models.execute_kw(DB, uid, PASS, 'account.move', 'create', [bill_vals])
-            print(f"✅ Facture créée ! ID Odoo: {bill_id} | Devise: {final_currency_id}")
+            print(f"✅ Facture créée ! ID Odoo: {bill_id} | Date Odoo: {bill_date}")
 
-            # Photo
             stem = p_file.name.replace(".parsed.json", "")
             image_path = None
             for ext in ['.JPG', '.jpg', '.jpeg', '.png', '.PNG']:
@@ -116,7 +109,6 @@ def post_to_odoo():
                     }])
                 print(f"📎 Photo attachée.")
 
-            # Nettoyage
             p_file.unlink()
             if image_path: image_path.unlink()
 
